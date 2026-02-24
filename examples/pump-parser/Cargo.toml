@@ -1,0 +1,20 @@
+[package]
+name = "yellowstone-vixen-example-pump-parser"
+description = "Example of parsing PumpFun and PumpSwap transactions"
+publish = false
+edition.workspace = true
+license = "MIT"
+repository = "https://github.com/rpcpool/yellowstone-vixen"
+
+[dependencies]
+clap = { workspace = true, features = ["derive", "cargo", "wrap_help"] }
+toml = { workspace = true }
+tracing = { workspace = true }
+rustls = { workspace = true }
+borsh = { workspace = true, features = ["derive"] }
+yellowstone-vixen = { workspace = true }
+yellowstone-vixen-core = { workspace = true }
+yellowstone-vixen-parser = { workspace = true }
+yellowstone-vixen-proc-macro = { workspace = true }
+yellowstone-vixen-yellowstone-grpc-source = { workspace = true }
+bs58 = { workspace = true }

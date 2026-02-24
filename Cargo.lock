@@ -2010,7 +2010,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 2.0.111",
 ]
 
 [[package]]
@@ -4284,6 +4284,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
+name = "mime_guess"
+version = "2.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
+dependencies = [
+ "mime",
+ "unicase",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4356,6 +4366,24 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.111",
+]
+
+[[package]]
+name = "multer"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01acbdc23469fd8fe07ab135923371d5f5a422fbf9c522158677c8eb15bc51c2"
+dependencies = [
+ "bytes",
+ "encoding_rs",
+ "futures-util",
+ "http 0.2.12",
+ "httparse",
+ "log",
+ "memchr",
+ "mime",
+ "spin",
+ "version_check",
 ]
 
 [[package]]
@@ -6268,6 +6296,12 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "scoped-tls"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294"
 
 [[package]]
 name = "scopeguard"
@@ -9176,8 +9210,8 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tokio-stream",
- "tokio-tungstenite",
- "tungstenite",
+ "tokio-tungstenite 0.28.0",
+ "tungstenite 0.28.0",
  "url 2.5.7",
 ]
 
@@ -12238,6 +12272,18 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c83b561d025642014097b66e6c1bb422783339e0909e4429cde4749d1990bc38"
+dependencies = [
+ "futures-util",
+ "log",
+ "tokio",
+ "tungstenite 0.21.0",
+]
+
+[[package]]
+name = "tokio-tungstenite"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d25a406cddcc431a75d3d9afc6a7c0f7428d4891dd973e4d54c56b46127bf857"
@@ -12248,7 +12294,7 @@ dependencies = [
  "rustls-pki-types",
  "tokio",
  "tokio-rustls 0.26.4",
- "tungstenite",
+ "tungstenite 0.28.0",
  "webpki-roots 0.26.11",
 ]
 
@@ -12712,6 +12758,25 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tungstenite"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ef1a641ea34f399a848dea702823bbecfb4c486f911735368f1f137cb8257e1"
+dependencies = [
+ "byteorder",
+ "bytes",
+ "data-encoding",
+ "http 1.4.0",
+ "httparse",
+ "log",
+ "rand 0.8.5",
+ "sha1",
+ "thiserror 1.0.69",
+ "url 2.5.7",
+ "utf-8",
+]
+
+[[package]]
+name = "tungstenite"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8628dcc84e5a09eb3d8423d6cb682965dea9133204e8fb3efee74c2a0c259442"
@@ -12951,6 +13016,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfa7760aed19e106de2c7c0b581b509f2f25d3dacaf737cb82ac61bc6d760b0e"
 dependencies = [
  "try-lock",
+]
+
+[[package]]
+name = "warp"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4378d202ff965b011c64817db11d5829506d3404edeadb61f190d111da3f231c"
+dependencies = [
+ "bytes",
+ "futures-channel",
+ "futures-util",
+ "headers",
+ "http 0.2.12",
+ "hyper 0.14.32",
+ "log",
+ "mime",
+ "mime_guess",
+ "multer",
+ "percent-encoding 2.3.2",
+ "pin-project",
+ "scoped-tls",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "tokio",
+ "tokio-tungstenite 0.21.0",
+ "tokio-util 0.7.17",
+ "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -13791,6 +13885,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "yellowstone-vixen-example-fee-tracker"
+version = "0.0.0"
+dependencies = [
+ "borsh 1.6.0",
+ "bs58",
+ "clap 4.5.53",
+ "rustls 0.23.35",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+ "warp",
+ "yellowstone-vixen",
+ "yellowstone-vixen-core",
+ "yellowstone-vixen-parser",
+ "yellowstone-vixen-proc-macro",
+ "yellowstone-vixen-yellowstone-grpc-source",
+]
+
+[[package]]
 name = "yellowstone-vixen-example-filtered-pipeline"
 version = "0.0.0"
 dependencies = [
@@ -13854,6 +13969,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "yellowstone-vixen-example-pamm-first-swaps"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "borsh 1.6.0",
+ "bs58",
+ "clap 4.5.53",
+ "rustls 0.23.35",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+ "warp",
+ "yellowstone-vixen",
+ "yellowstone-vixen-core",
+ "yellowstone-vixen-parser",
+ "yellowstone-vixen-proc-macro",
+ "yellowstone-vixen-yellowstone-grpc-source",
+]
+
+[[package]]
 name = "yellowstone-vixen-example-prometheus"
 version = "0.0.0"
 dependencies = [
@@ -13870,6 +14007,23 @@ dependencies = [
  "yellowstone-vixen-proc-macro",
  "yellowstone-vixen-spl-token-extensions-parser",
  "yellowstone-vixen-spl-token-parser",
+ "yellowstone-vixen-yellowstone-grpc-source",
+]
+
+[[package]]
+name = "yellowstone-vixen-example-pump-parser"
+version = "0.0.0"
+dependencies = [
+ "borsh 1.6.0",
+ "bs58",
+ "clap 4.5.53",
+ "rustls 0.23.35",
+ "toml 0.8.23",
+ "tracing",
+ "yellowstone-vixen",
+ "yellowstone-vixen-core",
+ "yellowstone-vixen-parser",
+ "yellowstone-vixen-proc-macro",
  "yellowstone-vixen-yellowstone-grpc-source",
 ]
 

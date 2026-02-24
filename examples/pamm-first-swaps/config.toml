@@ -1,0 +1,9 @@
+# Yellowstone gRPC source configuration
+[source]
+endpoint = "http://62.197.45.101:11000"
+x_token = ""
+timeout = 30
+
+[buffer]
+jobs = 10
+sources-channel-size = 100000

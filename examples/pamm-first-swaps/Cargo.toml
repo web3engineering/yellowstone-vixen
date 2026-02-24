@@ -1,0 +1,25 @@
+[package]
+name = "yellowstone-vixen-example-pamm-first-swaps"
+description = "Example of tracking first 10 swaps per mint with HTTP API"
+publish = false
+edition.workspace = true
+license = "MIT"
+repository = "https://github.com/rpcpool/yellowstone-vixen"
+
+[dependencies]
+clap = { workspace = true, features = ["derive", "cargo", "wrap_help"] }
+toml = { workspace = true }
+tracing = { workspace = true }
+rustls = { workspace = true }
+borsh = { workspace = true, features = ["derive"] }
+yellowstone-vixen = { workspace = true }
+yellowstone-vixen-core = { workspace = true }
+yellowstone-vixen-parser = { workspace = true }
+yellowstone-vixen-proc-macro = { workspace = true }
+yellowstone-vixen-yellowstone-grpc-source = { workspace = true }
+bs58 = { workspace = true }
+base64 = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+warp = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
