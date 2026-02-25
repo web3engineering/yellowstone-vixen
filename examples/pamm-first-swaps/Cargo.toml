@@ -10,6 +10,7 @@ repository = "https://github.com/rpcpool/yellowstone-vixen"
 clap = { workspace = true, features = ["derive", "cargo", "wrap_help"] }
 toml = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rustls = { workspace = true }
 borsh = { workspace = true, features = ["derive"] }
 yellowstone-vixen = { workspace = true }
