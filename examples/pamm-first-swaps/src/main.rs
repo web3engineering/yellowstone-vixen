@@ -76,10 +76,6 @@ pub struct SellEvent {
     pub padding_or_unknown: [u8; 32], // Unknown field to match 416 byte size
 }
 
-// Event discriminators (from actual transaction logs)
-const BUY_EVENT_DISCRIMINATOR: [u8; 8] = [62, 47, 55, 10, 165, 3, 220, 42];
-const SELL_EVENT_DISCRIMINATOR: [u8; 8] = [103, 244, 82, 31, 44, 245, 119, 119];
-
 #[derive(clap::Parser)]
 #[command(version, author, about)]
 pub struct Opts {
@@ -149,37 +145,20 @@ impl Parser for PumpAmmSwapParser {
             .map(|ix| Arc::clone(&ix.shared))
             .ok_or(ParseError::Filtered)?;
 
-        let mut swaps: Vec<(String, SwapRecord)> = vec![];
-
-        // Step 1: Parse events from logs to get actual traded amounts
-        let mut buy_events: Vec<BuyEvent> = vec![];
-        let mut sell_events: Vec<SellEvent> = vec![];
-
-        for log in &shared.log_messages {
-            if let Some(data_str) = log.strip_prefix("Program data: ") {
-                if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(data_str.trim()) {
-                    if decoded.len() < 8 {
-                        continue;
-                    }
-
-                    let discriminator = &decoded[0..8];
-                    let event_data = &decoded[8..];
-
-                    // Try both discriminators and both event types
-                    if let Ok(event) = BuyEvent::try_from_slice(event_data) {
-                        buy_events.push(event);
-                    } else if let Ok(event) = SellEvent::try_from_slice(event_data) {
-                        sell_events.push(event);
-                    }
-                }
-            }
+        // Skip failed transactions
+        if shared.err.is_some() {
+            return Err(ParseError::Filtered);
         }
 
+        // Step 1: Buffer all swap instructions with their mint addresses
+        // We need the mint from instructions to associate with events
+        #[derive(Debug, Clone)]
+        enum SwapType {
+            Buy,
+            Sell,
+        }
 
-        // Step 2: Parse instructions to get mint addresses
-        // Match instructions with events by order
-        let mut buy_event_idx = 0;
-        let mut sell_event_idx = 0;
+        let mut buffered_swaps: Vec<(SwapType, String)> = vec![]; // (type, mint)
 
         for ix in ixs.iter().flat_map(|i| i.visit_all()) {
             if ix.program != pump_amm::ID {
@@ -194,59 +173,82 @@ impl Parser for PumpAmmSwapParser {
             match parsed {
                 pump_amm::PumpAmmInstruction::Buy { accounts, .. } => {
                     let mint = bs58::encode(accounts.base_mint).into_string();
-
-                    // Match with corresponding buy event
-                    if buy_event_idx < buy_events.len() {
-                        let event = &buy_events[buy_event_idx];
-                        swaps.push((
-                            mint,
-                            SwapRecord {
-                                swap_type: "buy".to_string(),
-                                base_amount: event.base_amount_out,
-                                quote_amount: event.quote_amount_in, // Actual amount from event
-                                timestamp: event.timestamp,
-                            },
-                        ));
-                        buy_event_idx += 1;
-                    }
+                    buffered_swaps.push((SwapType::Buy, mint));
                 }
                 pump_amm::PumpAmmInstruction::BuyExactQuoteIn { accounts, .. } => {
                     let mint = bs58::encode(accounts.base_mint).into_string();
+                    buffered_swaps.push((SwapType::Buy, mint));
+                }
+                pump_amm::PumpAmmInstruction::Sell { accounts, .. } => {
+                    let mint = bs58::encode(accounts.base_mint).into_string();
+                    buffered_swaps.push((SwapType::Sell, mint));
+                }
+                _ => {}
+            }
+        }
 
-                    // Match with corresponding buy event
+        // Step 2: Parse events from logs - events confirm successful execution
+        let mut buy_events: Vec<BuyEvent> = vec![];
+        let mut sell_events: Vec<SellEvent> = vec![];
+
+        for log in &shared.log_messages {
+            if let Some(data_str) = log.strip_prefix("Program data: ") {
+                if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(data_str.trim()) {
+                    if decoded.len() < 8 {
+                        continue;
+                    }
+
+                    let event_data = &decoded[8..];
+
+                    if let Ok(event) = BuyEvent::try_from_slice(event_data) {
+                        buy_events.push(event);
+                    } else if let Ok(event) = SellEvent::try_from_slice(event_data) {
+                        sell_events.push(event);
+                    }
+                }
+            }
+        }
+
+        // Step 3: Match events to buffered instructions by order
+        // Only create swap records for instructions that have corresponding events
+        let mut swaps: Vec<(String, SwapRecord)> = vec![];
+        let mut buy_event_idx = 0;
+        let mut sell_event_idx = 0;
+
+        for (swap_type, mint) in buffered_swaps {
+            match swap_type {
+                SwapType::Buy => {
                     if buy_event_idx < buy_events.len() {
                         let event = &buy_events[buy_event_idx];
+                        buy_event_idx += 1;
                         swaps.push((
                             mint,
                             SwapRecord {
                                 swap_type: "buy".to_string(),
                                 base_amount: event.base_amount_out,
-                                quote_amount: event.quote_amount_in, // Actual amount from event
+                                quote_amount: event.quote_amount_in,
                                 timestamp: event.timestamp,
                             },
                         ));
-                        buy_event_idx += 1;
                     }
+                    // No event = swap didn't complete successfully, skip it
                 }
-                pump_amm::PumpAmmInstruction::Sell { accounts, .. } => {
-                    let mint = bs58::encode(accounts.base_mint).into_string();
-
-                    // Match with corresponding sell event
+                SwapType::Sell => {
                     if sell_event_idx < sell_events.len() {
                         let event = &sell_events[sell_event_idx];
+                        sell_event_idx += 1;
                         swaps.push((
                             mint,
                             SwapRecord {
                                 swap_type: "sell".to_string(),
                                 base_amount: event.base_amount_in,
-                                quote_amount: event.quote_amount_out, // Actual amount from event
+                                quote_amount: event.quote_amount_out,
                                 timestamp: event.timestamp,
                             },
                         ));
-                        sell_event_idx += 1;
                     }
+                    // No event = swap didn't complete successfully, skip it
                 }
-                _ => {}
             }
         }
 
