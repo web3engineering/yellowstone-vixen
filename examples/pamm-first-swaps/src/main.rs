@@ -97,6 +97,8 @@ pub struct SwapRecord {
     pub base_amount: u64,
     pub quote_amount: u64,
     pub timestamp: i64,
+    pub signature: String,
+    pub slot: u64,
 }
 
 /// Tracker for first N swaps per mint
@@ -309,6 +311,8 @@ impl Parser for PumpAmmSwapParser {
         let mut buy_event_idx = 0;
         let mut sell_event_idx = 0;
 
+        let slot = txn.slot;
+
         for (i, (swap_type, mint)) in buffered_swaps.iter().enumerate() {
             match swap_type {
                 SwapType::Buy => {
@@ -324,6 +328,8 @@ impl Parser for PumpAmmSwapParser {
                                 base_amount: event.base_amount,
                                 quote_amount: event.quote_amount,
                                 timestamp: event.timestamp,
+                                signature: txn_sig.clone(),
+                                slot,
                             },
                         ));
                     } else {
@@ -344,6 +350,8 @@ impl Parser for PumpAmmSwapParser {
                                 base_amount: event.base_amount,
                                 quote_amount: event.quote_amount,
                                 timestamp: event.timestamp,
+                                signature: txn_sig.clone(),
+                                slot,
                             },
                         ));
                     } else {
