@@ -13885,6 +13885,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "yellowstone-vixen-example-copy-trader"
+version = "0.6.0-alpha.0"
+dependencies = [
+ "bs58",
+ "chrono",
+ "clap 4.5.53",
+ "rustls 0.23.35",
+ "serde",
+ "serde_json",
+ "solana-client",
+ "solana-commitment-config",
+ "solana-sdk",
+ "spl-token 9.0.0",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+ "tracing-subscriber",
+ "warp",
+ "yellowstone-vixen",
+ "yellowstone-vixen-core",
+ "yellowstone-vixen-okx",
+ "yellowstone-vixen-yellowstone-grpc-source",
+]
+
+[[package]]
 name = "yellowstone-vixen-example-fee-tracker"
 version = "0.0.0"
 dependencies = [
@@ -14111,6 +14136,29 @@ dependencies = [
  "solana-transaction-status",
  "yellowstone-grpc-proto",
  "yellowstone-vixen-core",
+]
+
+[[package]]
+name = "yellowstone-vixen-okx"
+version = "0.6.0-alpha.0"
+dependencies = [
+ "base64 0.22.1",
+ "bincode",
+ "bs58",
+ "chrono",
+ "clap 4.5.53",
+ "hmac 0.12.1",
+ "reqwest 0.12.24",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "solana-client",
+ "solana-commitment-config",
+ "solana-sdk",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

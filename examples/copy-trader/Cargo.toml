@@ -1,0 +1,28 @@
+[package]
+name = "yellowstone-vixen-example-copy-trader"
+description = "Copy trading bot with OKX integration"
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+yellowstone-vixen = { workspace = true }
+yellowstone-vixen-core = { workspace = true }
+yellowstone-vixen-yellowstone-grpc-source = { workspace = true }
+yellowstone-vixen-okx = { path = "../../crates/okx" }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+clap = { workspace = true, features = ["derive"] }
+toml = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rustls = { workspace = true }
+warp = { workspace = true }
+solana-client = { workspace = true }
+solana-commitment-config = { workspace = true }
+solana-sdk = { workspace = true }
+spl-token = { workspace = true, features = ["no-entrypoint"] }
+bs58 = { workspace = true }
+chrono = "0.4"

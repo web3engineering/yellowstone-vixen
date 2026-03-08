@@ -1,0 +1,77 @@
+[source]
+endpoint = "http://62.197.45.101:11000"
+x_token = ""
+timeout = 30
+
+[buffer]
+jobs = 10
+sources-channel-size = 100000
+
+[copy_trading]
+# Whitelisted wallets to monitor (base58 encoded public keys)
+# Example wallets that are very active:
+whitelist = [
+"46qJ3GKTpttsxA7BCcFfsoMuqcGVMtvtccULuowUNeCg",
+"HeG8xBX4ypJVw5ViVqet8aZpFYtQ41UsscgcehJpPM8C",
+"BCT5tmvnzVAP4H8uYzsgDG8K5TR24fejbKgCrL3t7Dc9",
+"HsMHZGLc3g5HDiFaXhAiyiAEoKx6L5ZdJuMAyuMk5XaU",
+"6pnCY9Lhds6sZEW6GYR491aHU5EgH1cEYcsAb5u7Lxs2",
+"G2fM41tUDtbhBzBYnDhNT1eDpDc6eDJtJrucK1ewWcyz",
+"3YPYTazBEJ8a8cheEdPkj2RKC3hSmNhF8KcTR9zkZyD3",
+"2fifgyqTa2d6Cc8jvGyJVN5gnBUdxHSKDU5iDy3hdKVt",
+"DEUwUaFfTVAyfnojhgBLZhFX91K62m97YivWN3vQoWEx"
+]
+
+# Private key for signing transactions (base58 encoded)
+# WARNING: KEEP THIS SECURE! Never commit this to git with real keys!
+private_key = "3CjPLEVPgeyydCgsKPcnN16y15aYiU4bpNcwNZP68bvyEP7PvaZXmkkct4cgT7aY2N6mAF5rK8CLmok9gniGQYxp"
+
+
+# Buy amount in SOL (e.g., 0.1 SOL = ~$20-30 depending on SOL price)
+# Start small for testing!
+buy_amount_sol = 0.001
+
+# SOL to keep unwrapped in wallet (for transaction fees)
+# Excess SOL will be wrapped to WSOL on startup
+sol_leave_on_wallet = 0.01
+
+# Maximum number of trades to execute before exiting (optional, for debugging)
+# Comment out or remove to run indefinitely
+max_trades = 2
+
+# HTTP server address for monitoring endpoints
+http_addr = "0.0.0.0:8180"
+
+# OKX DEX Aggregator API configuration (V6 API)
+okx_api_key = "a2ae21e7-4f4e-4075-a65b-5c9437e334b9"
+okx_secret_key = "4FF9BF1A97F3104ED69EED62914858DB"
+okx_passphrase = "Ggsha222@"
+# okx_base_url = "https://web3.okx.com/api/v6/dex/aggregator"  # Optional, defaults to V6
+
+# Old credentials (deprecated - kept for reference)
+# okx_api_key = "72544cbd-78c3-4297-8ac2-4aec193cc0da"
+# okx_secret_key = "A041EC1D918A4306D53A91AC1D4EDD71"
+# okx_passphrase = "K0st@okx"
+
+slippage_percent = "1.0"
+
+# Solana RPC endpoint for transaction submission
+# Use a reliable RPC provider (can be local, Helius, QuickNode, etc.)
+solana_rpc_url = "https://api.mainnet-beta.solana.com"
+
+# Interesting currencies (quote tokens to detect sells for)
+# These are the tokens that when INCREASED in balance indicate a sell occurred
+[[copy_trading.interesting_currencies]]
+name = "USDC"
+mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+priority = 90
+
+[[copy_trading.interesting_currencies]]
+name = "USDT"
+mint = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+priority = 90
+
+[[copy_trading.interesting_currencies]]
+name = "WSOL"
+mint = "So11111111111111111111111111111111111111112"
+priority = 1
