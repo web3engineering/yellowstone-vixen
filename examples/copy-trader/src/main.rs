@@ -143,17 +143,63 @@ impl CopyTraderParser {
     /// Build full account list from transaction
     fn build_account_list(&self, shared: &Arc<yellowstone_vixen_core::instruction::InstructionShared>) -> Vec<Vec<u8>> {
         let mut accounts = Vec::new();
-
-        // Add static keys
         accounts.extend(shared.accounts.static_keys.clone());
-
-        // Add dynamic writable keys
         accounts.extend(shared.accounts.dynamic_rw.clone());
-
-        // Add dynamic readonly keys
         accounts.extend(shared.accounts.dynamic_ro.clone());
-
         accounts
+    }
+
+    /// Check if a token balance entry belongs to the given wallet.
+    ///
+    /// Primary check: `owner` field == wallet address (base58).
+    /// Fallback when `owner` is empty: derive the expected ATA for the wallet + mint
+    /// and compare with the account at `account_index`. This handles Yellowstone nodes
+    /// that don't populate the `owner` field.
+    fn token_balance_belongs_to_wallet(
+        &self,
+        owner: &str,
+        mint: &str,
+        account_index: usize,
+        wallet_str: &str,
+        wallet_bytes: &[u8],
+        accounts: &[Vec<u8>],
+    ) -> bool {
+        // Primary: owner field is set
+        if !owner.is_empty() {
+            return owner == wallet_str;
+        }
+
+        // Fallback: derive ATA and compare with account at account_index
+        let Ok(wallet_pubkey) = Pubkey::try_from(wallet_bytes) else { return false };
+        let Ok(mint_pubkey) = Pubkey::from_str(mint) else { return false };
+
+        let ata_program = Pubkey::from_str("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+            .expect("static const");
+
+        // Check standard SPL Token and Token-2022 programs
+        let token_programs = [
+            spl_token::id(),
+            Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
+                .expect("static const"),
+        ];
+
+        if account_index >= accounts.len() {
+            return false;
+        }
+        let account_at_idx = &accounts[account_index];
+
+        for token_program in &token_programs {
+            let (expected_ata, _) = Pubkey::find_program_address(
+                &[wallet_pubkey.as_ref(), token_program.as_ref(), mint_pubkey.as_ref()],
+                &ata_program,
+            );
+            if account_at_idx == expected_ata.as_ref() {
+                debug!("[ATA fallback] Matched wallet {} via ATA derivation for mint {}", wallet_str, mint);
+                return true;
+            }
+        }
+
+        false
     }
 
     /// Detect sells from balance changes
@@ -190,11 +236,16 @@ impl CopyTraderParser {
             // Track token balance changes for this wallet
             let mut token_deltas: HashMap<String, (f64, u8)> = HashMap::new(); // mint -> (delta, decimals)
 
-            // Process token balances - check OWNER not account_index
-            // Token accounts are owned by the wallet, so we need to check the owner field
+            // Process token balances - check OWNER field, with ATA derivation fallback
             for pre_bal in &shared.pre_token_balances {
-                // Check if this token account is owned by our whitelisted wallet
-                if pre_bal.owner == wallet_str {
+                if self.token_balance_belongs_to_wallet(
+                    &pre_bal.owner,
+                    &pre_bal.mint,
+                    pre_bal.account_index as usize,
+                    &wallet_str,
+                    wallet_pubkey,
+                    &accounts,
+                ) {
                     let mint = pre_bal.mint.clone();
                     let pre_amount = pre_bal.ui_token_amount.as_ref()
                         .map(|a| a.ui_amount)
@@ -202,14 +253,19 @@ impl CopyTraderParser {
                     let decimals = pre_bal.ui_token_amount.as_ref()
                         .map(|a| a.decimals as u8)
                         .unwrap_or(9);
-
                     token_deltas.entry(mint).or_insert((0.0, decimals)).0 -= pre_amount;
                 }
             }
 
             for post_bal in &shared.post_token_balances {
-                // Check if this token account is owned by our whitelisted wallet
-                if post_bal.owner == wallet_str {
+                if self.token_balance_belongs_to_wallet(
+                    &post_bal.owner,
+                    &post_bal.mint,
+                    post_bal.account_index as usize,
+                    &wallet_str,
+                    wallet_pubkey,
+                    &accounts,
+                ) {
                     let mint = post_bal.mint.clone();
                     let post_amount = post_bal.ui_token_amount.as_ref()
                         .map(|a| a.ui_amount)
@@ -217,7 +273,6 @@ impl CopyTraderParser {
                     let decimals = post_bal.ui_token_amount.as_ref()
                         .map(|a| a.decimals as u8)
                         .unwrap_or(9);
-
                     token_deltas.entry(mint).or_insert((0.0, decimals)).0 += post_amount;
                 }
             }
@@ -417,6 +472,7 @@ pub struct CopyTraderHandler {
     buy_amount_lamports: u64,
     solana_rpc_url: String,
     wsol_mint: String,
+    slippage_percent: String,
     trade_counter: Arc<AtomicUsize>,
     max_trades: Option<usize>,
 }
@@ -456,6 +512,7 @@ impl CopyTraderHandler {
             buy_amount_lamports,
             solana_rpc_url: config.solana_rpc_url.clone(),
             wsol_mint,
+            slippage_percent: config.slippage_percent.clone(),
             trade_counter: Arc::new(AtomicUsize::new(0)),
             max_trades: config.max_trades,
         })
@@ -492,7 +549,8 @@ impl CopyTraderHandler {
             &sell.token_mint,
             &amount_str,
             &user_wallet,
-            &"1.0", // slippage percent
+            &self.slippage_percent,
+            &self.solana_rpc_url,
         ).await {
             Ok(tx) => tx,
             Err(e) => {
@@ -602,6 +660,7 @@ impl yellowstone_vixen::Handler<SellDetectionResult, TransactionUpdate> for Copy
             let buy_amount = self.buy_amount_lamports;
             let rpc_url = self.solana_rpc_url.clone();
             let wsol = self.wsol_mint.clone();
+            let slippage = self.slippage_percent.clone();
             let counter = self.trade_counter.clone();
             let max = self.max_trades;
 
@@ -614,6 +673,7 @@ impl yellowstone_vixen::Handler<SellDetectionResult, TransactionUpdate> for Copy
                     buy_amount_lamports: buy_amount,
                     solana_rpc_url: rpc_url,
                     wsol_mint: wsol,
+                    slippage_percent: slippage,
                     trade_counter: counter,
                     max_trades: max,
                 };

@@ -102,6 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &args.amount,
             &wallet_address,
             &args.slippage,
+            &args.rpc_url,
         )
         .await?;
 
