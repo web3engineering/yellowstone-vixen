@@ -482,8 +482,25 @@ impl OkxClient {
             instructions.push(ComputeBudgetInstruction::set_compute_unit_price(fee));
         }
 
+        // ComputeBudget program ID (constant across all Solana clusters)
+        const COMPUTE_BUDGET_PROGRAM_ID: &str = "ComputeBudget111111111111111111111111111111";
+        // SetComputeUnitPrice discriminant = 3
+        const SET_COMPUTE_UNIT_PRICE_DISCRIMINANT: u8 = 3;
+
         for inst_data in &data.instruction_lists {
             let ix_data = BASE64.decode(&inst_data.data)?;
+
+            // If we're injecting our own priority fee, skip any SetComputeUnitPrice
+            // instructions already present in the OKX response to avoid duplicates.
+            if priority_fee_microlamports.is_some()
+                && inst_data.program_id == COMPUTE_BUDGET_PROGRAM_ID
+                && ix_data.first() == Some(&SET_COMPUTE_UNIT_PRICE_DISCRIMINANT)
+            {
+                tracing::debug!(
+                    "Skipping OKX SetComputeUnitPrice instruction (overridden by priority_fee_microlamports)"
+                );
+                continue;
+            }
 
             let program_id = Pubkey::from_str(&inst_data.program_id)
                 .map_err(|e| OkxError::InvalidResponse(format!("Invalid program ID: {}", e)))?;
