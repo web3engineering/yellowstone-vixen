@@ -56,6 +56,8 @@ pub struct CopyTradingConfig {
     #[serde(default)]
     pub okx_base_url: Option<String>,
     pub slippage_percent: String,
+    #[serde(default)]
+    pub priority_fee_microlamports: Option<u64>,
     pub solana_rpc_url: String,
     pub interesting_currencies: Vec<InterestingCurrency>,
     /// SOL to leave unwrapped in wallet (for fees). Excess will be wrapped to WSOL on startup.
@@ -473,6 +475,7 @@ pub struct CopyTraderHandler {
     solana_rpc_url: String,
     wsol_mint: String,
     slippage_percent: String,
+    priority_fee_microlamports: Option<u64>,
     trade_counter: Arc<AtomicUsize>,
     max_trades: Option<usize>,
 }
@@ -513,6 +516,7 @@ impl CopyTraderHandler {
             solana_rpc_url: config.solana_rpc_url.clone(),
             wsol_mint,
             slippage_percent: config.slippage_percent.clone(),
+            priority_fee_microlamports: config.priority_fee_microlamports,
             trade_counter: Arc::new(AtomicUsize::new(0)),
             max_trades: config.max_trades,
         })
@@ -541,6 +545,75 @@ impl CopyTraderHandler {
 
         let amount_str = self.buy_amount_lamports.to_string();
         let user_wallet = self.keypair.pubkey().to_string();
+        let wallet_pubkey = self.keypair.pubkey();
+
+        // Connect to RPC (used for balance check, blockhash, and submission)
+        let rpc_client = RpcClient::new_with_commitment(
+            self.solana_rpc_url.clone(),
+            CommitmentConfig::confirmed(),
+        );
+
+        // --- Balance check ---
+        // 1. Native SOL (for transaction fees)
+        let sol_balance = match rpc_client.get_balance(&wallet_pubkey) {
+            Ok(b) => b,
+            Err(e) => {
+                let error = format!("Failed to get SOL balance: {}", e);
+                error!("[BALANCE] {}", error);
+                return CopyTradeStatus::Failed { error };
+            }
+        };
+        const MIN_FEE_LAMPORTS: u64 = 5_000; // ~0.000005 SOL — minimum for a tx fee
+        if sol_balance < MIN_FEE_LAMPORTS {
+            let reason = format!(
+                "Insufficient SOL for fees: {} lamports available, need at least {}",
+                sol_balance, MIN_FEE_LAMPORTS
+            );
+            error!("[BALANCE] {}", reason);
+            return CopyTradeStatus::Skipped { reason };
+        }
+
+        // 2. WSOL token account balance (the actual swap input)
+        let ata_program_id = Pubkey::from_str("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+            .expect("valid ATA program id");
+        let wsol_pubkey = Pubkey::from_str(&self.wsol_mint).expect("valid wsol mint");
+        let (wsol_ata, _) = Pubkey::find_program_address(
+            &[
+                wallet_pubkey.as_ref(),
+                spl_token::id().as_ref(),
+                wsol_pubkey.as_ref(),
+            ],
+            &ata_program_id,
+        );
+
+        let wsol_balance_lamports = match rpc_client.get_token_account_balance(&wsol_ata) {
+            Ok(ui) => ui.amount.parse::<u64>().unwrap_or(0),
+            Err(e) => {
+                let reason = format!(
+                    "Failed to get WSOL balance for {} (account may not exist): {}",
+                    wsol_ata, e
+                );
+                error!("[BALANCE] {}", reason);
+                return CopyTradeStatus::Skipped { reason };
+            }
+        };
+
+        if wsol_balance_lamports < self.buy_amount_lamports {
+            let reason = format!(
+                "Insufficient WSOL: {} lamports available, {} lamports required for trade",
+                wsol_balance_lamports, self.buy_amount_lamports
+            );
+            error!("[BALANCE] {}", reason);
+            return CopyTradeStatus::Skipped { reason };
+        }
+
+        info!(
+            "[BALANCE] SOL: {:.6} SOL, WSOL: {:.6} SOL (need {:.6} SOL for trade)",
+            sol_balance as f64 / 1_000_000_000.0,
+            wsol_balance_lamports as f64 / 1_000_000_000.0,
+            self.buy_amount_lamports as f64 / 1_000_000_000.0,
+        );
+        // --- End balance check ---
 
         // Get swap transaction from OKX
         info!("[OKX] Getting swap transaction for buying {} with {} SOL", sell.token_mint, self.buy_amount_lamports as f64 / 1_000_000_000.0);
@@ -551,6 +624,7 @@ impl CopyTraderHandler {
             &user_wallet,
             &self.slippage_percent,
             &self.solana_rpc_url,
+            self.priority_fee_microlamports,
         ).await {
             Ok(tx) => tx,
             Err(e) => {
@@ -561,12 +635,6 @@ impl CopyTraderHandler {
         };
 
         info!("[OKX] Transaction built successfully");
-
-        // Connect to RPC and get recent blockhash
-        let rpc_client = RpcClient::new_with_commitment(
-            self.solana_rpc_url.clone(),
-            CommitmentConfig::confirmed(),
-        );
 
         let recent_blockhash = match rpc_client.get_latest_blockhash() {
             Ok(hash) => hash,
@@ -661,6 +729,7 @@ impl yellowstone_vixen::Handler<SellDetectionResult, TransactionUpdate> for Copy
             let rpc_url = self.solana_rpc_url.clone();
             let wsol = self.wsol_mint.clone();
             let slippage = self.slippage_percent.clone();
+            let priority_fee = self.priority_fee_microlamports;
             let counter = self.trade_counter.clone();
             let max = self.max_trades;
 
@@ -674,6 +743,7 @@ impl yellowstone_vixen::Handler<SellDetectionResult, TransactionUpdate> for Copy
                     solana_rpc_url: rpc_url,
                     wsol_mint: wsol,
                     slippage_percent: slippage,
+                    priority_fee_microlamports: priority_fee,
                     trade_counter: counter,
                     max_trades: max,
                 };

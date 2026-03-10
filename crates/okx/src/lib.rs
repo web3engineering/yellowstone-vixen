@@ -7,6 +7,7 @@ use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use solana_client::nonblocking::rpc_client::RpcClient as NonblockingRpcClient;
+use solana_compute_budget_interface::ComputeBudgetInstruction;
 use solana_sdk::{
     hash::Hash,
     instruction::Instruction,
@@ -441,6 +442,7 @@ impl OkxClient {
     ///
     /// Returns the unsigned transaction ready to be signed.
     /// `rpc_url` is required to fetch Address Lookup Tables when the swap route uses them.
+    /// `priority_fee_microlamports` optionally adds a ComputeBudget priority fee instruction.
     pub async fn get_unsigned_transaction(
         &self,
         from_token: &str,
@@ -449,12 +451,13 @@ impl OkxClient {
         user_wallet: &str,
         slippage_percent: &str,
         rpc_url: &str,
+        priority_fee_microlamports: Option<u64>,
     ) -> Result<VersionedTransaction, OkxError> {
         let response = self
             .get_swap_instruction(from_token, to_token, amount, user_wallet, slippage_percent)
             .await?;
 
-        self.build_transaction_from_instructions(&response.data, user_wallet, rpc_url)
+        self.build_transaction_from_instructions(&response.data, user_wallet, rpc_url, priority_fee_microlamports)
             .await
     }
 
@@ -465,6 +468,7 @@ impl OkxClient {
         data: &SwapInstructionData,
         user_wallet: &str,
         rpc_url: &str,
+        priority_fee_microlamports: Option<u64>,
     ) -> Result<VersionedTransaction, OkxError> {
         // Parse user wallet pubkey
         let payer = Pubkey::from_str(user_wallet)
@@ -472,6 +476,12 @@ impl OkxClient {
 
         // Convert instruction data to Solana Instructions
         let mut instructions = Vec::new();
+
+        // Prepend ComputeBudget priority fee instruction if configured
+        if let Some(fee) = priority_fee_microlamports {
+            instructions.push(ComputeBudgetInstruction::set_compute_unit_price(fee));
+        }
+
         for inst_data in &data.instruction_lists {
             let ix_data = BASE64.decode(&inst_data.data)?;
 
