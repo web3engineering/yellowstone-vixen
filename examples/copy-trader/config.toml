@@ -55,6 +55,11 @@ okx_passphrase = "Ggsha222@"
 
 slippage_percent = "1.0"
 
+# Priority fee in microlamports per compute unit (optional)
+# Higher values increase the chance of landing transactions during congestion
+# Example: 1000 = 0.001 lamports per CU, typical range: 1000-100000
+# priority_fee_microlamports = 10000
+
 # Solana RPC endpoint for transaction submission
 # Use a reliable RPC provider (can be local, Helius, QuickNode, etc.)
 solana_rpc_url = "https://api.mainnet-beta.solana.com"

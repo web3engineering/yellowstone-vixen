@@ -14154,6 +14154,7 @@ dependencies = [
  "sha2 0.10.9",
  "solana-client",
  "solana-commitment-config",
+ "solana-compute-budget-interface",
  "solana-sdk",
  "thiserror 1.0.69",
  "tokio",

@@ -6,10 +6,12 @@ use chrono::Utc;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+use solana_client::nonblocking::rpc_client::RpcClient as NonblockingRpcClient;
+use solana_compute_budget_interface::ComputeBudgetInstruction;
 use solana_sdk::{
     hash::Hash,
     instruction::Instruction,
-    message::{v0, VersionedMessage},
+    message::{v0, AddressLookupTableAccount, VersionedMessage},
     pubkey::Pubkey,
     transaction::VersionedTransaction,
 };
@@ -438,7 +440,9 @@ impl OkxClient {
 
     /// Get swap instruction and build the transaction (V6 API)
     ///
-    /// Returns the unsigned transaction ready to be signed
+    /// Returns the unsigned transaction ready to be signed.
+    /// `rpc_url` is required to fetch Address Lookup Tables when the swap route uses them.
+    /// `priority_fee_microlamports` optionally adds a ComputeBudget priority fee instruction.
     pub async fn get_unsigned_transaction(
         &self,
         from_token: &str,
@@ -446,20 +450,25 @@ impl OkxClient {
         amount: &str,
         user_wallet: &str,
         slippage_percent: &str,
+        rpc_url: &str,
+        priority_fee_microlamports: Option<u64>,
     ) -> Result<VersionedTransaction, OkxError> {
         let response = self
             .get_swap_instruction(from_token, to_token, amount, user_wallet, slippage_percent)
             .await?;
 
-        // V6 API returns instructions that we need to build into a transaction
-        self.build_transaction_from_instructions(&response.data, user_wallet)
+        self.build_transaction_from_instructions(&response.data, user_wallet, rpc_url, priority_fee_microlamports)
+            .await
     }
 
-    /// Build a VersionedTransaction from V6 API instruction data
-    fn build_transaction_from_instructions(
+    /// Build a VersionedTransaction from V6 API instruction data.
+    /// Fetches Address Lookup Tables from RPC so the transaction stays within the 1232-byte limit.
+    async fn build_transaction_from_instructions(
         &self,
         data: &SwapInstructionData,
         user_wallet: &str,
+        rpc_url: &str,
+        priority_fee_microlamports: Option<u64>,
     ) -> Result<VersionedTransaction, OkxError> {
         // Parse user wallet pubkey
         let payer = Pubkey::from_str(user_wallet)
@@ -467,15 +476,35 @@ impl OkxClient {
 
         // Convert instruction data to Solana Instructions
         let mut instructions = Vec::new();
+
+        // Prepend ComputeBudget priority fee instruction if configured
+        if let Some(fee) = priority_fee_microlamports {
+            instructions.push(ComputeBudgetInstruction::set_compute_unit_price(fee));
+        }
+
+        // ComputeBudget program ID (constant across all Solana clusters)
+        const COMPUTE_BUDGET_PROGRAM_ID: &str = "ComputeBudget111111111111111111111111111111";
+        // SetComputeUnitPrice discriminant = 3
+        const SET_COMPUTE_UNIT_PRICE_DISCRIMINANT: u8 = 3;
+
         for inst_data in &data.instruction_lists {
-            // Decode base64 instruction data
             let ix_data = BASE64.decode(&inst_data.data)?;
 
-            // Parse program ID
+            // If we're injecting our own priority fee, skip any SetComputeUnitPrice
+            // instructions already present in the OKX response to avoid duplicates.
+            if priority_fee_microlamports.is_some()
+                && inst_data.program_id == COMPUTE_BUDGET_PROGRAM_ID
+                && ix_data.first() == Some(&SET_COMPUTE_UNIT_PRICE_DISCRIMINANT)
+            {
+                tracing::debug!(
+                    "Skipping OKX SetComputeUnitPrice instruction (overridden by priority_fee_microlamports)"
+                );
+                continue;
+            }
+
             let program_id = Pubkey::from_str(&inst_data.program_id)
                 .map_err(|e| OkxError::InvalidResponse(format!("Invalid program ID: {}", e)))?;
 
-            // Parse account metas
             let mut accounts = Vec::new();
             for acc in &inst_data.accounts {
                 let pubkey = Pubkey::from_str(&acc.pubkey)
@@ -495,31 +524,52 @@ impl OkxClient {
             });
         }
 
-        // For V0 transactions with address lookup tables, we need to compile with empty lookup tables
-        // The actual lookup table data will be fetched by the RPC client when submitting
-        let message = if !data.address_lookup_table_account.is_empty() {
-            // Use V0 message format for transactions with lookup tables
-            v0::Message::try_compile(
-                &payer,
-                &instructions,
-                &[], // Empty lookup tables - will be resolved by RPC
-                Hash::default(), // Blockhash will be set by the caller
-            )
-            .map_err(|e| OkxError::InvalidResponse(format!("Failed to compile V0 message: {}", e)))?
+        // Fetch Address Lookup Tables from RPC so accounts can be compressed as indices.
+        // Without this the transaction exceeds Solana's 1232-byte limit for complex routes.
+        let lookup_tables = if !data.address_lookup_table_account.is_empty() {
+            let rpc = NonblockingRpcClient::new(rpc_url.to_string());
+            let mut tables = Vec::new();
+            for alt_address in &data.address_lookup_table_account {
+                let alt_pubkey = Pubkey::from_str(alt_address)
+                    .map_err(|e| OkxError::InvalidResponse(format!("Invalid ALT address: {}", e)))?;
+
+                match rpc.get_account_data(&alt_pubkey).await {
+                    Ok(account_data) => {
+                        // Addresses are stored after the 56-byte metadata header, 32 bytes each
+                        const META_SIZE: usize = 56;
+                        if account_data.len() > META_SIZE {
+                            let addresses: Vec<Pubkey> = account_data[META_SIZE..]
+                                .chunks_exact(32)
+                                .filter_map(|chunk| {
+                                    <[u8; 32]>::try_from(chunk).ok().map(Pubkey::from)
+                                })
+                                .collect();
+                            tables.push(AddressLookupTableAccount {
+                                key: alt_pubkey,
+                                addresses,
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to fetch ALT {}: {}", alt_address, e);
+                    }
+                }
+            }
+            tables
         } else {
-            // Use V0 message without lookup tables
-            v0::Message::try_compile(
-                &payer,
-                &instructions,
-                &[],
-                Hash::default(),
-            )
-            .map_err(|e| OkxError::InvalidResponse(format!("Failed to compile message: {}", e)))?
+            vec![]
         };
 
-        // Create unsigned transaction
+        let message = v0::Message::try_compile(
+            &payer,
+            &instructions,
+            &lookup_tables,
+            Hash::default(), // Blockhash will be set by the caller
+        )
+        .map_err(|e| OkxError::InvalidResponse(format!("Failed to compile V0 message: {}", e)))?;
+
         let transaction = VersionedTransaction {
-            signatures: vec![solana_sdk::signature::Signature::default()], // Unsigned
+            signatures: vec![solana_sdk::signature::Signature::default()],
             message: VersionedMessage::V0(message),
         };
 
